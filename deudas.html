@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEBT_MONITOR | NEXUS OS</title>
+    <style>
+        :root { --bg: #050505; --panel: #0d0d0d; --accent: #00ff41; --danger: #ff3e3e; --warn: #ffcc00; --text: #d1d1d1; --subtle: #222; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; }
+        
+        .nav-back { background: none; color: #555; border: 1px solid #333; padding: 8px 15px; cursor: pointer; margin-bottom: 15px; font-size: 0.7rem; border-radius: 4px; text-decoration: none; display: inline-block; }
+        .nav-back:hover { border-color: var(--danger); color: var(--danger); }
+
+        /* DASHBOARD DEUDAS */
+        .header-panel { background: var(--panel); border: 1px solid var(--subtle); padding: 15px; border-radius: 8px; margin-bottom: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; }
+        .stat-box { border-right: 1px solid #222; }
+        .stat-box:last-child { border: none; }
+        .val { display: block; font-size: 1.1rem; font-weight: bold; font-family: 'Consolas', monospace; }
+        .lab { font-size: 0.6rem; color: #666; text-transform: uppercase; }
+
+        /* FORMULARIO DEUDA */
+        .input-box { background: var(--panel); border: 1px solid var(--subtle); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        input, select { background: #000; border: 1px solid #333; color: #fff; padding: 10px; width: 100%; box-sizing: border-box; margin-bottom: 8px; border-radius: 4px; font-size: 0.8rem; font-family: inherit; }
+        .btn-add { background: var(--accent); border: none; padding: 12px; width: 100%; font-weight: bold; cursor: pointer; border-radius: 4px; text-transform: uppercase; font-size: 0.8rem; }
+
+        /* LISTA DEUDAS */
+        .debt-card { background: var(--panel); border: 1px solid var(--subtle); padding: 15px; border-radius: 8px; margin-bottom: 12px; border-left: 6px solid #333; position: relative; }
+        .atrasado { border-left-color: var(--danger); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0px var(--danger); } 50% { box-shadow: 0 0 10px rgba(255, 62, 62, 0.2); } 100% { box-shadow: 0 0 0px var(--danger); } }
+        
+        .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .name { font-weight: bold; font-size: 0.95rem; }
+        .amt { color: #fff; font-family: 'Consolas', monospace; font-size: 1.1rem; }
+        .tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 3px; font-weight: bold; }
+        .tag-atr { background: var(--danger); color: #000; }
+        .tag-dia { background: var(--accent); color: #000; }
+
+        .btn-pay { background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 8px; width: 100%; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 0.75rem; text-transform: uppercase; }
+        .btn-pay:hover { background: var(--accent); color: #000; }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="nav-back">← VOLVER AL MENÚ PRINCIPAL</a>
+
+    <div id="debt-view">
+        <div class="header-panel">
+            <div class="stat-box">
+                <span class="val" id="totalDebt" style="color:var(--danger);">RD$ 0</span>
+                <span class="lab">BALANCE TOTAL</span>
+            </div>
+            <div class="stat-box">
+                <span class="val" id="totalMonthly" style="color:var(--warn);">RD$ 0</span>
+                <span class="lab">CUOTA MENSUAL</span>
+            </div>
+        </div>
+
+        <div class="input-box">
+            <input type="text" id="dName" placeholder="Acreedor (Ej: Carro)">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <input type="number" id="dAmount" placeholder="Balance Total">
+                <input type="number" id="dMonthly" placeholder="Pago Mensual">
+            </div>
+            <select id="dAtraso">
+                <option value="0">Estado: Al día</option>
+                <option value="1">1 Mes de atraso</option>
+                <option value="2">2 Meses de atraso</option>
+                <option value="4">4+ Meses de atraso</option>
+                <option value="10">10+ Meses de atraso</option>
+            </select>
+            <button class="btn-add" onclick="addDebt()">REGISTRAR OBLIGACIÓN</button>
+        </div>
+
+        <div id="dList"></div>
+    </div>
+
+    <script>
+        let debts = JSON.parse(localStorage.getItem('nx16_debts')) || [
+            {n: "Carro", v: 630583, m: 21000, a: 2},
+            {n: "Dorka", v: 250000, m: 8500, a: 10},
+            {n: "Fundapec", v: 180000, m: 42000, a: 4},
+            {n: "Mami", v: 82100, m: 3000, a: 0},
+            {n: "Banreserva Personal", v: 49000, m: 3315, a: 0},
+            {n: "Nerzon", v: 36000, m: 3000, a: 4},
+            {n: "Richard", v: 8000, m: 2000, a: 0}
+        ];
+
+        function render() {
+            const dList = document.getElementById('dList');
+            dList.innerHTML = '';
+            let totalB = 0;
+            let totalM = 0;
+
+            debts.sort((a,b) => b.a - a.a).forEach((d, i) => {
+                totalB += d.v;
+                totalM += d.m;
+                const isAtr = d.a > 0;
+
+                dList.innerHTML += `
+                    <div class="debt-card ${isAtr ? 'atrasado' : ''}">
+                        <div class="row">
+                            <span class="name">${d.n}</span>
+                            <span class="tag ${isAtr ? 'tag-atr' : 'tag-dia'}">${isAtr ? 'ATRASADO ('+d.a+'m)' : 'AL DÍA'}</span>
+                        </div>
+                        <div class="row">
+                            <span style="font-size:0.7rem; color:#666;">Balance Total:</span>
+                            <span class="amt">RD$ ${Math.round(d.v).toLocaleString()}</span>
+                        </div>
+                        <div class="row">
+                            <span style="font-size:0.7rem; color:#666;">Pago Mensual:</span>
+                            <span style="color:var(--warn); font-weight:bold;">RD$ ${Math.round(d.m).toLocaleString()}</span>
+                        </div>
+                        <button class="btn-pay" onclick="payD(${i})">ABONAR AL SALDO</button>
+                        <button onclick="delD(${i})" style="background:none; border:none; color:#333; font-size:1rem; position:absolute; top:5px; right:5px; cursor:pointer;">×</button>
+                    </div>`;
+            });
+
+            document.getElementById('totalDebt').innerText = `RD$ ${Math.round(totalB).toLocaleString()}`;
+            document.getElementById('totalMonthly').innerText = `RD$ ${Math.round(totalM).toLocaleString()}`;
+            localStorage.setItem('nx16_debts', JSON.stringify(debts));
+        }
+
+        function addDebt() {
+            const n = document.getElementById('dName').value;
+            const v = parseFloat(document.getElementById('dAmount').value);
+            const m = parseFloat(document.getElementById('dMonthly').value) || 0;
+            const a = parseInt(document.getElementById('dAtraso').value);
+            if(n && v) {
+                debts.push({n, v, m, a});
+                document.getElementById('dName').value = '';
+                document.getElementById('dAmount').value = '';
+                document.getElementById('dMonthly').value = '';
+                render();
+            }
+        }
+
+        function payD(i) {
+            const pay = prompt(`Abonar a ${debts[i].n} (Balance: RD$ ${debts[i].v.toLocaleString()}):`);
+            if(pay && !isNaN(pay)) {
+                debts[i].v -= parseFloat(pay);
+                if(debts[i].v <= 0) {
+                    alert("¡FELICIDADES! DEUDA LIQUIDADA.");
+                    debts.splice(i, 1);
+                }
+                render();
+            }
+        }
+
+        function delD(i) { if(confirm("¿Eliminar registro de deuda?")) { debts.splice(i, 1); render(); } }
+
+        render();
+    </script>
+</body>
+</html>
